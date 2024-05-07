@@ -68,7 +68,7 @@ func _process(_delta):
 	_move_view()
 
 func _draw():
-	var map_position = Vector2(500, 0)
+	var map_position = Vector2(render_width, 0)
 	var view_width = (tan(deg_to_rad(field_of_view / 2.)) * view_distance) * 2
 	# Draw 3d view
 	draw_texture(output_texture, Vector2(0, 0))
