@@ -7,7 +7,7 @@ extends Node2D
 		_update_view()
 
 ## The view distance of the rendered output (big performance impact). This determines how far can be seen at one render in terms of depth.
-@export var view_distance = 50.:
+@export var view_distance = 100.:
 	set(value):
 		view_distance = value
 		_update_view()
@@ -19,19 +19,19 @@ extends Node2D
 		_update_view()
 
 ## The factor that the colour gets multiplied by (no performance impact). This determines how big mountains get, how high walls are and so on.
-@export var amplitude = 120.:
+@export var amplitude = 300.:
 	set(value):
 		amplitude = value
 		_update_view()
 
 ## The width of the rendered output (medium performance impact).
-@export var render_width = 500.:
+@export var render_width = 640.:
 	set(value):
 		render_width = value
 		_update_view()
 
 ## The height of the rendered output (no performance impact).
-@export var render_height = 600.:
+@export var render_height = 360.:
 	set(value):
 		render_height = value
 		_update_view()
@@ -49,7 +49,7 @@ extends Node2D
 		_update_view()
 
 ## The approximate pitch of the view (no performance impact). This determines whether the camera looks up or down. 
-@export var pitch : float = 120.:
+@export var pitch : float = -20.:
 	set(value):
 		pitch = value
 		_update_view()
