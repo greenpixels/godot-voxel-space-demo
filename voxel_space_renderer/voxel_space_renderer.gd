@@ -134,7 +134,6 @@ func _update_view():
 	output_texture = ImageTexture.create_from_image(image)
 	queue_redraw()
 	var render_time = Time.get_ticks_msec() - started_at
-	print("Render took {TIME}ms".format({"TIME": render_time}))
 	last_render_time = render_time
 
 ## Scan through lines in an expanding pattern (triangle shaped) and return a 2 dimensional array containing the values of the scanned pixels
