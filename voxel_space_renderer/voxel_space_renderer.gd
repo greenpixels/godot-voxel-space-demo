@@ -4,7 +4,10 @@ extends Node2D
 @export var height_map: Texture2D:
 	set(value):
 		height_map = value
+		height_map_image = value.get_image()
 		_update_view()
+		
+@onready var height_map_image = height_map.get_image()
 
 ## The view distance of the rendered output (big performance impact). This determines how far can be seen at one render in terms of depth.
 @export var view_distance = 100.:
@@ -49,12 +52,12 @@ extends Node2D
 		_update_view()
 
 ## The approximate pitch of the view (no performance impact). This determines whether the camera looks up or down. 
-@export var pitch : float = -20.:
+@export var pitch: float = -20.:
 	set(value):
 		pitch = value
 		_update_view()
 
-@export var direction : float = 0.:
+@export var direction: float = 0.:
 	set(value):
 		direction = deg_to_rad(value)
 		_update_view()
@@ -102,19 +105,19 @@ func _move_view():
 	if Input.is_action_just_pressed("ui_left"):
 		direction = rad_to_deg(direction) - TURN_SPEED
 	elif Input.is_action_just_pressed("ui_right"):
-		direction =  rad_to_deg(direction) + TURN_SPEED
+		direction = rad_to_deg(direction) + TURN_SPEED
 		
 	if Input.is_action_just_pressed("ui_down"):
-		current_position -= Vector2.from_angle(direction + PI/2) * STEP_SPEED
+		current_position -= Vector2.from_angle(direction + PI / 2) * STEP_SPEED
 	elif Input.is_action_just_pressed("ui_up"):
-		current_position += Vector2.from_angle(direction + PI/2) * STEP_SPEED
+		current_position += Vector2.from_angle(direction + PI / 2) * STEP_SPEED
 
 ## Update the current view and redraw the rendered output
 func _update_view():
 	var started_at = Time.get_ticks_msec()
 	var array = _get_triangle_in_height_map()
 	var x = 0
-	var image = Image.create(render_width, render_height, false, height_map.get_image().get_format())
+	var image = Image.create(render_width, render_height, false, height_map_image.get_format())
 	var z: float = view_distance
 	for lines in array:
 		x = 0
@@ -156,13 +159,13 @@ func _get_triangle_in_height_map(): # -> Array[Array[float]] (can't type it sinc
 
 ## Scan through a line of pixels and return an array containing the values of the scanned pixels
 func _get_line_in_height_map_stretched(from: Vector2, to: Vector2) -> Array[float]:
-	var height_map_image = height_map.get_image()
+	
 	var step_distance: Vector2 = (to - from) / render_width
 	var current_step = from
 	var output: Array[float] = []
-
+	var map_rect = Rect2(Vector2(0, 0), height_map_image.get_size())
 	for count in int(render_width):
-		if Rect2(Vector2(0, 0), height_map_image.get_size()).has_point(current_step):
+		if map_rect.has_point(current_step):
 			var pixel = height_map_image.get_pixel(
 					int(current_step.x),
 					int(current_step.y)
