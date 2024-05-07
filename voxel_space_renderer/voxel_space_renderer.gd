@@ -49,19 +49,20 @@ extends Node2D
 		_update_view()
 
 ## The approximate pitch of the view (no performance impact). This determines whether the camera looks up or down. 
-@export var pitch = 120.:
+@export var pitch : float = 120.:
 	set(value):
 		pitch = value
 		_update_view()
 
-@export var direction = 0.:
+@export var direction : float = 0.:
 	set(value):
-		direction = value
+		direction = deg_to_rad(value)
 		_update_view()
 		
+const STEP_SPEED = 2
+const TURN_SPEED = 8
 var output_texture: ImageTexture;
 var last_render_time = 0
-var font: SystemFont
 
 func _process(_delta):
 	_move_view()
@@ -76,21 +77,21 @@ func _draw():
 	# Draw render width
 	draw_line(
 		map_position + current_position,
-		map_position + current_position + Vector2( - view_width / 2, view_distance),
+		map_position + current_position + Vector2( - view_width / 2, view_distance).rotated(direction),
 		Color.GREEN
 	)
 	draw_line(
 		map_position + current_position,
-		map_position + current_position + Vector2(view_width / 2, view_distance),
+		map_position + current_position + Vector2(view_width / 2, view_distance).rotated(direction),
 		Color.GREEN
 	)
 	draw_line(
-		map_position + current_position + Vector2( - view_width / 2, view_distance),
-		map_position + current_position + Vector2(view_width / 2, view_distance),
+		map_position + current_position + Vector2( - view_width / 2, view_distance).rotated(direction),
+		map_position + current_position + Vector2(view_width / 2, view_distance).rotated(direction),
 		Color.GREEN
 	)
 	# Draw render distance
-	draw_line(map_position + current_position, map_position + current_position + Vector2(0, view_distance), Color.BLUE)
+	draw_line(map_position + current_position, map_position + current_position + Vector2(0, view_distance).rotated(direction), Color.BLUE)
 	# Draw current position
 	draw_circle(map_position + current_position, 3, Color.RED)
 	# Draw debug information
@@ -98,17 +99,15 @@ func _draw():
 
 ## Move the current view based on keyboard input
 func _move_view():
-	const STEP_SPEED = 3
-	
 	if Input.is_action_just_pressed("ui_left"):
-		current_position.x -= STEP_SPEED
+		direction = rad_to_deg(direction) - TURN_SPEED
 	elif Input.is_action_just_pressed("ui_right"):
-		current_position.x += STEP_SPEED
+		direction =  rad_to_deg(direction) + TURN_SPEED
 		
 	if Input.is_action_just_pressed("ui_down"):
-		current_position.y += STEP_SPEED
+		current_position -= Vector2.from_angle(direction + PI/2) * STEP_SPEED
 	elif Input.is_action_just_pressed("ui_up"):
-		current_position.y -= STEP_SPEED
+		current_position += Vector2.from_angle(direction + PI/2) * STEP_SPEED
 
 ## Update the current view and redraw the rendered output
 func _update_view():
@@ -143,9 +142,15 @@ func _get_triangle_in_height_map(): # -> Array[Array[float]] (can't type it sinc
 	for dist in range(view_distance):
 		var step = dist
 		var triangle_render_width = (tan(deg_to_rad(field_of_view / 2.)) * step) * 2
-		var left_point = current_position + Vector2(triangle_render_width / ( - 2), step)
-		var right_point = left_point + Vector2(triangle_render_width, 0)
-		lines.push_front(_get_line_in_height_map_stretched(left_point, right_point))
+		var left_point = current_position + Vector2(triangle_render_width / ( - 2), step).rotated(direction)
+		var right_point = current_position + Vector2(triangle_render_width, step).rotated(direction)
+		
+		lines.push_front(
+			_get_line_in_height_map_stretched(
+				left_point,
+				right_point
+			)
+		)
 		
 	return lines
 

@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3 uid="uid://bjfpx05t5gbxl"]
+
+[ext_resource type="Script" path="res://voxel_space_renderer/voxel_space_renderer.gd" id="1_p38ei"]
+[ext_resource type="Texture2D" uid="uid://ktbrjdiop4uc" path="res://height_map_1.png" id="2_8ng5u"]
+
+[node name="VoxelSpaceRenderer" type="Node2D"]
+script = ExtResource("1_p38ei")
+height_map = ExtResource("2_8ng5u")
+z_height = 150.0
+pitch = -50.0
