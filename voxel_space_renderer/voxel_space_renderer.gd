@@ -8,7 +8,17 @@ extends Node2D
 		WorkerThreadPool.add_task(_update_view)
 		
 @onready var height_map_image: Image = height_map.get_image()
-var height_map_image_mutex = Mutex.new()
+
+## Set the colour map image (.png, .jpeg, etc)
+@export var colour_map: Texture2D:
+	set(value):
+		colour_map = value
+		colour_map_image = value.get_image()
+		WorkerThreadPool.add_task(_update_view)
+
+@onready var colour_map_image: Image = colour_map.get_image()
+
+var image_mutex = Mutex.new()
 
 ## The view distance of the rendered output (big performance impact). This determines how far can be seen at one render in terms of depth.
 @export var view_distance = 100.:
@@ -63,7 +73,7 @@ var height_map_image_mutex = Mutex.new()
 		direction = deg_to_rad(value)
 		WorkerThreadPool.add_task(_update_view)
 		
-const STEP_SPEED = 2
+const STEP_SPEED = 26
 const TURN_SPEED = 8
 var output_texture: ImageTexture;
 var last_render_time = 0
@@ -99,8 +109,10 @@ func _draw():
 	)
 	# Draw render distance
 	draw_line(map_position + current_position, map_position + current_position + Vector2(0, view_distance).rotated(direction), Color.BLUE)
+
 	# Draw current position
 	draw_circle(map_position + current_position, 3, Color.RED)
+
 	# Draw debug information
 	draw_string(
 		ThemeDB.fallback_font,
@@ -108,7 +120,7 @@ func _draw():
 		"Rendering: {R_TIME}ms | Processing: {P_TIME}ms | Combined: {U_TIME}ms".format(
 			{"R_TIME": last_render_time, "P_TIME": last_process_time, "U_TIME": last_update_time}),
 		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
+		- 1,
 		ThemeDB.fallback_font_size,
 		Color.WHITE
 	)
@@ -134,24 +146,26 @@ func _update_view():
 		var process_thread = Thread.new()
 		threads.push_front(process_thread)
 		process_thread.start(process_triangle_lines.bind(distance))
-	render_lines = threads.map(func(_thread : Thread): return _thread.wait_to_finish())
+	render_lines = threads.map(func(_thread: Thread): return _thread.wait_to_finish())
 	var process_time = Time.get_ticks_msec() - started_at
 	
 	var x = 0
 	var image = Image.create(render_width, render_height, false, height_map_image.get_format())
 	var z: float = view_distance
 	for lines in render_lines:
+		if lines == null: continue
 		x = 0
-		for value in lines:
-			var height = (z_height - (value * 50.)) / z * amplitude + pitch
+		var line_width = render_width / lines.size()
+		for values in lines:
+			var height = (z_height - (values.v * 50.)) / z * amplitude + pitch
 			image.fill_rect(
 				Rect2i(
 					Vector2(x, height),
-					Vector2(1, height)
+					Vector2(line_width, render_height - height)
 				),
-				Color.from_hsv(0, 0, value, 1)
+				Color.from_string(values.c, Color.BLACK)
 			)
-			x += 1
+			x += line_width
 		z -= 1.
 	output_texture = ImageTexture.create_from_image(image)
 	var render_time = Time.get_ticks_msec() - process_time - started_at
@@ -162,9 +176,13 @@ func _update_view():
 	call_deferred("queue_redraw")
 	
 func process_triangle_lines(distance: int):
-	height_map_image_mutex.lock()
+	if height_map_image == null or colour_map_image == null:
+		return
+	image_mutex.lock()
 	var height_map_image_copy = Image.create_from_data(height_map_image.get_width(), height_map_image.get_height(), false, height_map_image.get_format(), height_map_image.get_data())
-	height_map_image_mutex.unlock()
+	var colour_map_image_copy = Image.create_from_data(colour_map_image.get_width(), colour_map_image.get_height(), false, colour_map_image.get_format(), colour_map_image.get_data())
+	image_mutex.unlock()
+	
 	var triangle_render_width = (tan(deg_to_rad(field_of_view / 2.)) * distance) * 2
 	var left_point = current_position + Vector2(triangle_render_width / ( - 2), distance).rotated(direction)
 	var right_point = current_position + Vector2(triangle_render_width, distance).rotated(direction)
@@ -172,24 +190,37 @@ func process_triangle_lines(distance: int):
 			left_point,
 			right_point,
 			height_map_image_copy,
-			render_width
+			colour_map_image_copy,
+			render_width,
+			distance
 			)
 	return line
 
 ## Scan through a line of pixels and return an array containing the values of the scanned pixels
-func _get_line_in_height_map_stretched(from: Vector2, to: Vector2, image: Image, target_width: float) -> Array[float]:
+func _get_line_in_height_map_stretched(from: Vector2, to: Vector2, height_image: Image, colour_image: Image, target_width: float, distance: int) -> Array[Dictionary]:
 	var step_distance: Vector2 = (to - from) / target_width
 	var current_step = from
-	var output: Array[float] = []
-	var map_rect = Rect2(Vector2(0, 0), image.get_size())
-	for count in int(target_width):
+	var detail_blurrer = int(1 + (distance) / 25)
+	var output: Array[Dictionary] = []
+	var map_rect = Rect2(Vector2(0, 0), height_image.get_size())
+	for count in int(target_width / detail_blurrer):
 		if map_rect.has_point(current_step):
-			var pixel = image.get_pixel(
+			var height_pixel = height_image.get_pixel(
 					int(current_step.x),
 					int(current_step.y)
 				)
-			output.push_front(float(pixel.v))
+			var colour_pixel = colour_image.get_pixel(
+					int(current_step.x),
+					int(current_step.y)
+				)
+			output.push_front({
+					"v": height_pixel.v,
+					"c": colour_pixel.to_html()
+				})
 		else:
-			output.push_front(0)
-		current_step += step_distance
+			output.push_front({
+					"v": 0,
+					"c": Color.BLACK.to_html()
+				})
+		current_step += step_distance * detail_blurrer
 	return output
