@@ -8,7 +8,7 @@
 script = ExtResource("1_p38ei")
 height_map = ExtResource("2_8ng5u")
 colour_map = ExtResource("3_dasxd")
-view_distance = 600.0
+view_distance = 300.0
 field_of_view = 90.0
 amplitude = 1900.0
 render_width = 1280.0
