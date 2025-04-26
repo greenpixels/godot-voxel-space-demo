@@ -1,226 +1,90 @@
 extends Node2D
 
-## Set the height map image (.png, .jpeg, etc)
-@export var height_map: Texture2D:
-	set(value):
-		height_map = value
-		height_map_image = value.get_image()
-		WorkerThreadPool.add_task(_update_view)
-		
-@onready var height_map_image: Image = height_map.get_image()
+@export var height_map : Texture2D
+@export var color_map : Texture2D
+var height_map_image : Image
+var color_map_image : Image
+var y_buffer : Array[float] = []
+const SCREEN_WIDTH := 250
+const SCREEN_HEIGHT := 150
+const SPEED = 5.
+var blur_step : float
+var min_height : float
+var min_width : float
+var screen_range = range(0, SCREEN_WIDTH)
 
-## Set the colour map image (.png, .jpeg, etc)
-@export var colour_map: Texture2D:
-	set(value):
-		colour_map = value
-		colour_map_image = value.get_image()
-		WorkerThreadPool.add_task(_update_view)
-
-@onready var colour_map_image: Image = colour_map.get_image()
-
-var image_mutex = Mutex.new()
-
-## The view distance of the rendered output (big performance impact). This determines how far can be seen at one render in terms of depth.
-@export var view_distance = 100.:
-	set(value):
-		view_distance = value
-		WorkerThreadPool.add_task(_update_view)
-
-## The view width of the rendered output (medium performance impact). This determines how much can be seen at one render in terms of width.
-@export var field_of_view = 60.:
-	set(value):
-		field_of_view = value
-		WorkerThreadPool.add_task(_update_view)
-
-## The factor that the colour gets multiplied by (no performance impact). This determines how big mountains get, how high walls are and so on.
-@export var amplitude = 300.:
-	set(value):
-		amplitude = value
-		WorkerThreadPool.add_task(_update_view)
-
-## The width of the rendered output (medium performance impact).
-@export var render_width = 640.:
-	set(value):
-		render_width = value
-		WorkerThreadPool.add_task(_update_view)
-
-## The height of the rendered output (no performance impact).
-@export var render_height = 360.:
-	set(value):
-		render_height = value
-		WorkerThreadPool.add_task(_update_view)
-
-## The current position of the rendered view (no performance impact).
-@export var current_position = Vector2(0, 0):
+var current_position : Vector2 = Vector2.ZERO :
 	set(value):
 		current_position = value
-		WorkerThreadPool.add_task(_update_view)
-
-## The approximate height of the view (no performance impact). This determines how far above the terrain the camera is.
-@export var z_height = 50.:
+		queue_redraw()
+var current_height : float = 200 :
 	set(value):
-		z_height = value
-		WorkerThreadPool.add_task(_update_view)
-
-## The approximate pitch of the view (no performance impact). This determines whether the camera looks up or down. 
-@export var pitch: float = -20.:
-	set(value):
-		pitch = value
-		WorkerThreadPool.add_task(_update_view)
-
-@export var direction: float = 0.:
-	set(value):
-		direction = deg_to_rad(value)
-		WorkerThreadPool.add_task(_update_view)
+		current_height = value
+		blur_step = clamp(current_height / 20000., 0.05, 0.09)
+		queue_redraw()
 		
-const STEP_SPEED = 26
-const TURN_SPEED = 8
-var output_texture: ImageTexture;
-var last_render_time = 0
-var last_process_time = 0
-var last_update_time = 0
+func _ready() -> void:
+	y_buffer.resize(SCREEN_WIDTH)
+	height_map_image = height_map.get_image()
+	color_map_image = color_map.get_image()
+	min_height = min(height_map.get_size().y, color_map.get_size().y)
+	min_width = min(height_map.get_size().x, color_map.get_size().x)
+	blur_step = clamp(current_height / 20000., 0.03, 0.05)
+	queue_redraw()
+	
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event.is_action("ui_left"):
+		current_position = current_position + Vector2.LEFT * SPEED
+	if event.is_action("ui_right"):
+		current_position = current_position + Vector2.RIGHT * SPEED
+	if event.is_action("ui_up"):
+		current_position = current_position + Vector2.UP * SPEED
+	if event.is_action("ui_down"):
+		current_position = current_position + Vector2.DOWN * SPEED
+	if event.is_action("ui_select"):
+		current_height += 5.
+	if event.is_action("ui_text_delete"):
+		current_height -= 5.
 
-func _process(_delta):
-	_move_view()
+func render(pos : Vector2, phi: float,  height: float, horizon: float, scale_height: float, distance: float, screen_width: float, screen_height: float):
+	var sinphi = sin(phi);
+	var cosphi = cos(phi);
 
-func _draw():
-	var map_position = Vector2(render_width, 0)
-	var view_width = (tan(deg_to_rad(field_of_view / 2.)) * view_distance) * 2
-	# Draw 3d view
-	if output_texture:
-		draw_texture(output_texture, Vector2(0, 0))
-	# Draw 2d height map
-	draw_texture(height_map, Vector2(render_width, 0))
-	# Draw render width
-	draw_line(
-		map_position + current_position,
-		map_position + current_position + Vector2( - view_width / 2, view_distance).rotated(direction),
-		Color.GREEN
-	)
-	draw_line(
-		map_position + current_position,
-		map_position + current_position + Vector2(view_width / 2, view_distance).rotated(direction),
-		Color.GREEN
-	)
-	draw_line(
-		map_position + current_position + Vector2( - view_width / 2, view_distance).rotated(direction),
-		map_position + current_position + Vector2(view_width / 2, view_distance).rotated(direction),
-		Color.GREEN
-	)
-	# Draw render distance
-	draw_line(map_position + current_position, map_position + current_position + Vector2(0, view_distance).rotated(direction), Color.BLUE)
-
-	# Draw current position
-	draw_circle(map_position + current_position, 3, Color.RED)
-
-	# Draw debug information
-	draw_string(
-		ThemeDB.fallback_font,
-		Vector2(16, 32),
-		"Rendering: {R_TIME}ms | Processing: {P_TIME}ms | Combined: {U_TIME}ms".format(
-			{"R_TIME": last_render_time, "P_TIME": last_process_time, "U_TIME": last_update_time}),
-		HORIZONTAL_ALIGNMENT_LEFT,
-		- 1,
-		ThemeDB.fallback_font_size,
-		Color.WHITE
-	)
-
-## Move the current view based on keyboard input
-func _move_view():
-	if Input.is_action_just_pressed("ui_left"):
-		direction = rad_to_deg(direction) - TURN_SPEED
-	elif Input.is_action_just_pressed("ui_right"):
-		direction = rad_to_deg(direction) + TURN_SPEED
+	y_buffer.fill(screen_height)
+	
+	var dz : float = 1.
+	var z : float = 1.
+	
+	while z < distance:
 		
-	if Input.is_action_just_pressed("ui_down"):
-		current_position -= Vector2.from_angle(direction + PI / 2) * STEP_SPEED
-	elif Input.is_action_just_pressed("ui_up"):
-		current_position += Vector2.from_angle(direction + PI / 2) * STEP_SPEED
+		var pleft = Vector2(
+			(-cosphi*z - sinphi*z) + pos.x,
+			( sinphi*z - cosphi*z) + pos.y)
+		var pright = Vector2(
+			( cosphi*z - sinphi*z) + pos.x,
+			(-sinphi*z - cosphi*z) + pos.y)
+			
+		var dx = (pright.x - pleft.x) / screen_width
+		var dy = (pright.y - pleft.y) / screen_width
+		
+		for i in screen_range:
+			var draw_pos_x = wrapf(pleft.x, 0, min_width)
+			var draw_pos_y = wrapf(pleft.y, 0, min_height)
+			
+			var height_on_screen = (height - height_map_image.get_pixel(draw_pos_x, draw_pos_y).v * 255.) / z * scale_height + horizon
 
-## Update the current view and redraw the rendered output
-func _update_view():
-	var started_at = Time.get_ticks_msec()
-	var render_lines = []
-	var threads = []
-	for distance in view_distance:
-		var process_thread = Thread.new()
-		threads.push_front(process_thread)
-		process_thread.start(process_triangle_lines.bind(distance))
-	render_lines = threads.map(func(_thread: Thread): return _thread.wait_to_finish())
-	var process_time = Time.get_ticks_msec() - started_at
-	
-	var x = 0
-	var image = Image.create(render_width, render_height, false, height_map_image.get_format())
-	var z: float = view_distance
-	for lines in render_lines:
-		if lines == null: continue
-		x = 0
-		var line_width = render_width / lines.size()
-		for values in lines:
-			var height = (z_height - (values.v * 50.)) / z * amplitude + pitch
-			image.fill_rect(
-				Rect2i(
-					Vector2(x, height),
-					Vector2(line_width, render_height - height)
-				),
-				Color.from_string(values.c, Color.BLACK)
-			)
-			x += line_width
-		z -= 1.
-	output_texture = ImageTexture.create_from_image(image)
-	var render_time = Time.get_ticks_msec() - process_time - started_at
-	var update_time = Time.get_ticks_msec() - started_at
-	last_render_time = render_time
-	last_update_time = update_time
-	last_process_time = process_time
-	call_deferred("queue_redraw")
-	
-func process_triangle_lines(distance: int):
-	if height_map_image == null or colour_map_image == null:
-		return
-	image_mutex.lock()
-	var height_map_image_copy = Image.create_from_data(height_map_image.get_width(), height_map_image.get_height(), false, height_map_image.get_format(), height_map_image.get_data())
-	var colour_map_image_copy = Image.create_from_data(colour_map_image.get_width(), colour_map_image.get_height(), false, colour_map_image.get_format(), colour_map_image.get_data())
-	image_mutex.unlock()
-	
-	var triangle_render_width = (tan(deg_to_rad(field_of_view / 2.)) * distance) * 2
-	var left_point = current_position + Vector2(triangle_render_width / ( - 2), distance).rotated(direction)
-	var right_point = current_position + Vector2(triangle_render_width, distance).rotated(direction)
-	var line = _get_line_in_height_map_stretched(
-			left_point,
-			right_point,
-			height_map_image_copy,
-			colour_map_image_copy,
-			render_width,
-			distance
-			)
-	return line
+			if height_on_screen < y_buffer[i]:
+				var color = color_map_image.get_pixel(draw_pos_x, draw_pos_y)
+				draw_line(Vector2(i,  y_buffer[i]), Vector2(i, min(y_buffer[i], height_on_screen)), color, 1)
+				y_buffer[i] = height_on_screen
+			pleft.x += dx 
+			pleft.y += dy 
+		z += dz
+		dz += blur_step
 
-## Scan through a line of pixels and return an array containing the values of the scanned pixels
-func _get_line_in_height_map_stretched(from: Vector2, to: Vector2, height_image: Image, colour_image: Image, target_width: float, distance: int) -> Array[Dictionary]:
-	var step_distance: Vector2 = (to - from) / target_width
-	var current_step = from
-	var detail_blurrer = int(1 + (distance) / 25)
-	var output: Array[Dictionary] = []
-	var map_rect = Rect2(Vector2(0, 0), height_image.get_size())
-	for count in int(target_width / detail_blurrer):
-		if map_rect.has_point(current_step):
-			var height_pixel = height_image.get_pixel(
-					int(current_step.x),
-					int(current_step.y)
-				)
-			var colour_pixel = colour_image.get_pixel(
-					int(current_step.x),
-					int(current_step.y)
-				)
-			output.push_front({
-					"v": height_pixel.v,
-					"c": colour_pixel.to_html()
-				})
-		else:
-			output.push_front({
-					"v": 0,
-					"c": Color.BLACK.to_html()
-				})
-		current_step += step_distance * detail_blurrer
-	return output
+
+
+func _draw() -> void:
+	var start_time = Time.get_ticks_msec()
+	render(current_position, 0, current_height, 50, 120, 800, SCREEN_WIDTH, SCREEN_HEIGHT)
+	%FpsCounter.text = str(Time.get_ticks_msec() - start_time)

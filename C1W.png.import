@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ksp63vpqqcll"
-path="res://.godot/imported/colour_map_1.png-9860f73931b5843687f18531c5a56d87.ctex"
+uid="uid://bjdbmjl00e2hg"
+path="res://.godot/imported/C1W.png-eca0f6d03e5ce68f566d5a1949df9e73.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://colour_map_1.png"
-dest_files=["res://.godot/imported/colour_map_1.png-9860f73931b5843687f18531c5a56d87.ctex"]
+source_file="res://C1W.png"
+dest_files=["res://.godot/imported/C1W.png-eca0f6d03e5ce68f566d5a1949df9e73.ctex"]
 
 [params]
 

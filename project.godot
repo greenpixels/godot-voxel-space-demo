@@ -12,9 +12,8 @@ config_version=5
 
 config/name="voxel-space-demo"
 run/main_scene="res://voxel_space_renderer/voxel_space_renderer.tscn"
-config/features=PackedStringArray("4.2", "GL Compatibility")
+config/features=PackedStringArray("4.4", "GL Compatibility")
 
-[rendering]
+[display]
 
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
+window/stretch/mode="viewport"
