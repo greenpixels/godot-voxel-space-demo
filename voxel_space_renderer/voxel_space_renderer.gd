@@ -59,9 +59,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action("ui_down"):
 		current_position = current_position + Vector2.DOWN * SPEED
 	if event.is_action("ui_select"):
-		current_height += 5.
+		current_height += SPEED
 	if event.is_action("ui_text_delete"):
-		current_height -= 5.
+		current_height -= SPEED
 
 func render(pos : Vector2, height: int, horizon: int, scale_height: int, distance: float, screen_width: int, screen_height: int):
 	var start_time = Time.get_ticks_msec()
