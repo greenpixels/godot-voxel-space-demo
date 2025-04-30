@@ -2,34 +2,51 @@ extends Node2D
 
 @export var height_map : Texture2D
 @export var color_map : Texture2D
-var height_map_image : Image
-var color_map_image : Image
-var y_buffer : Array[float] = []
+
 const SCREEN_WIDTH := 250
 const SCREEN_HEIGHT := 150
 const SPEED = 5.
+var height_map_image : Image
+var color_map_image : Image
+var y_buffer : Array[float] = []
 var blur_step : float
-var min_height : float
-var min_width : float
+var min_height : int
+var min_width : int
 var screen_range = range(0, SCREEN_WIDTH)
+var phi : int = 0
+var sinphi = sin(phi);
+var cosphi = cos(phi);
+var hm_bytes : PackedByteArray
+var map_color_values : Array[Color] = []
+var lines_to_draw = []
+var colors_to_draw = []
 
 var current_position : Vector2 = Vector2.ZERO :
 	set(value):
 		current_position = value
 		queue_redraw()
-var current_height : float = 200 :
+var current_height : int = 200 :
 	set(value):
 		current_height = value
 		blur_step = clamp(current_height / 20000., 0.05, 0.09)
 		queue_redraw()
 		
 func _ready() -> void:
+	lines_to_draw.resize(SCREEN_WIDTH * 2)
+	colors_to_draw.resize(SCREEN_WIDTH)
 	y_buffer.resize(SCREEN_WIDTH)
 	height_map_image = height_map.get_image()
+	height_map_image.convert(Image.FORMAT_L8)
 	color_map_image = color_map.get_image()
+	hm_bytes = height_map_image.get_data()
 	min_height = min(height_map.get_size().y, color_map.get_size().y)
 	min_width = min(height_map.get_size().x, color_map.get_size().x)
-	blur_step = clamp(current_height / 20000., 0.03, 0.05)
+	blur_step = clamp(current_height / 20000., 0.04, 0.06)
+	
+	for y in range(color_map_image.get_size().y):
+		for x in range(color_map_image.get_size().x):
+			map_color_values.append(color_map_image.get_pixel(x, y))
+				
 	queue_redraw()
 	
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -46,17 +63,18 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action("ui_text_delete"):
 		current_height -= 5.
 
-func render(pos : Vector2, phi: float,  height: float, horizon: float, scale_height: float, distance: float, screen_width: float, screen_height: float):
-	var sinphi = sin(phi);
-	var cosphi = cos(phi);
-
+func render(pos : Vector2, height: int, horizon: int, scale_height: int, distance: float, screen_width: int, screen_height: int):
+	var start_time = Time.get_ticks_msec()
+	lines_to_draw = []
+	colors_to_draw = []
 	y_buffer.fill(screen_height)
 	
 	var dz : float = 1.
 	var z : float = 1.
+	var inner_loop_count = 0
+	var lines_computed = 0
 	
 	while z < distance:
-		
 		var pleft = Vector2(
 			(-cosphi*z - sinphi*z) + pos.x,
 			( sinphi*z - cosphi*z) + pos.y)
@@ -68,23 +86,24 @@ func render(pos : Vector2, phi: float,  height: float, horizon: float, scale_hei
 		var dy = (pright.y - pleft.y) / screen_width
 		
 		for i in screen_range:
-			var draw_pos_x = wrapf(pleft.x, 0, min_width)
-			var draw_pos_y = wrapf(pleft.y, 0, min_height)
+			inner_loop_count += 1
+			var draw_pos_x = int(pleft.x) & (min_width - 1) 
+			var draw_pos_y = int(pleft.y) & (min_height - 1) 
 			
-			var height_on_screen = (height - height_map_image.get_pixel(draw_pos_x, draw_pos_y).v * 255.) / z * scale_height + horizon
-
+			var height_on_screen = (height - hm_bytes[draw_pos_y * min_width + draw_pos_x]) / z * scale_height + horizon
 			if height_on_screen < y_buffer[i]:
-				var color = color_map_image.get_pixel(draw_pos_x, draw_pos_y)
-				draw_line(Vector2(i,  y_buffer[i]), Vector2(i, min(y_buffer[i], height_on_screen)), color, 1)
+				lines_computed += 1
+				lines_to_draw.append(Vector2(i,  y_buffer[i]))
+				lines_to_draw.append(Vector2(i, min(y_buffer[i], height_on_screen)))
+				colors_to_draw.append(map_color_values[draw_pos_y * min_width + draw_pos_x])
 				y_buffer[i] = height_on_screen
 			pleft.x += dx 
 			pleft.y += dy 
 		z += dz
 		dz += blur_step
-
-
+	draw_multiline_colors(lines_to_draw, colors_to_draw, 1)
+	print("Inner Loop Count: ", inner_loop_count, "; Lines Computed: ", lines_computed, "; Renderint took: ", Time.get_ticks_msec() - start_time, "ms")
 
 func _draw() -> void:
-	var start_time = Time.get_ticks_msec()
-	render(current_position, 0, current_height, 50, 120, 800, SCREEN_WIDTH, SCREEN_HEIGHT)
-	%FpsCounter.text = str(Time.get_ticks_msec() - start_time)
+	render(current_position, current_height, 50, 120, 1500, SCREEN_WIDTH, SCREEN_HEIGHT)
+	
