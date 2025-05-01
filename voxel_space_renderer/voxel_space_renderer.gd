@@ -8,18 +8,18 @@ const SCREEN_HEIGHT := 150
 const SPEED = 5.
 var height_map_image : Image
 var color_map_image : Image
-var y_buffer : Array[float] = []
+var y_buffer : PackedFloat32Array = []
 var blur_step : float
 var min_height : int
 var min_width : int
-var screen_range = range(0, SCREEN_WIDTH)
+var screen_range : PackedInt32Array = range(0, SCREEN_WIDTH)
 var phi : int = 0
 var sinphi = sin(phi);
 var cosphi = cos(phi);
 var hm_bytes : PackedByteArray
-var map_color_values : Array[Color] = []
-var lines_to_draw = []
-var colors_to_draw = []
+var map_color_values : PackedColorArray = []
+var lines_to_draw : PackedVector2Array = []
+var colors_to_draw : PackedColorArray = []
 
 var current_position : Vector2 = Vector2.ZERO :
 	set(value):
@@ -32,8 +32,9 @@ var current_height : int = 200 :
 		queue_redraw()
 		
 func _ready() -> void:
-	lines_to_draw.resize(SCREEN_WIDTH * 2)
-	colors_to_draw.resize(SCREEN_WIDTH)
+	lines_to_draw.resize(25000 * 2)
+	lines_to_draw.fill(Vector2.ZERO)
+	colors_to_draw.resize(25000)
 	y_buffer.resize(SCREEN_WIDTH)
 	height_map_image = height_map.get_image()
 	height_map_image.convert(Image.FORMAT_L8)
@@ -65,8 +66,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func render(pos : Vector2, height: int, horizon: int, scale_height: int, distance: float, screen_width: int, screen_height: int):
 	var start_time = Time.get_ticks_msec()
-	lines_to_draw = []
-	colors_to_draw = []
+	colors_to_draw.fill(Color.TRANSPARENT)
 	y_buffer.fill(screen_height)
 	
 	var dz : float = 1.
@@ -93,9 +93,9 @@ func render(pos : Vector2, height: int, horizon: int, scale_height: int, distanc
 			var height_on_screen = (height - hm_bytes[draw_pos_y * min_width + draw_pos_x]) / z * scale_height + horizon
 			if height_on_screen < y_buffer[i]:
 				lines_computed += 1
-				lines_to_draw.append(Vector2(i,  y_buffer[i]))
-				lines_to_draw.append(Vector2(i, min(y_buffer[i], height_on_screen)))
-				colors_to_draw.append(map_color_values[draw_pos_y * min_width + draw_pos_x])
+				lines_to_draw[lines_computed * 2] = (Vector2(i,  y_buffer[i]))
+				lines_to_draw[lines_computed * 2 + 1] = (Vector2(i, min(y_buffer[i], height_on_screen)))
+				colors_to_draw[lines_computed] = (map_color_values[draw_pos_y * min_width + draw_pos_x])
 				y_buffer[i] = height_on_screen
 			pleft.x += dx 
 			pleft.y += dy 
@@ -106,4 +106,3 @@ func render(pos : Vector2, height: int, horizon: int, scale_height: int, distanc
 
 func _draw() -> void:
 	render(current_position, current_height, 50, 120, 1500, SCREEN_WIDTH, SCREEN_HEIGHT)
-	
